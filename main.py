@@ -40,7 +40,7 @@ class GenerateMusicResponse(BaseModel):
 
 @app.cls(
     image=image,
-    gpu="L4"
+    gpu="L4",
     volumes={"/models": model_volume, "/.cache/huggingface": hf_volume},
     secrets=[music_gen_secrets],
     scaledown_window=10
@@ -57,7 +57,7 @@ class MusicGenServer:
         #Music Gen Model
         self.music_model = ACEStepPipline(
             checkpoint_dir="/models",
-            dtype="bfloat16"
+            dtype="bfloat16",
             torch_compile=False,
             cpu_offload=False,
             overlapped_decode=False
@@ -89,7 +89,7 @@ class MusicGenServer:
             self.music_model(
                 prompt="electronic rap",
                 lyrics="[verse]\nWaves on the bass, pulsing in the speakers,\nTurn the dial up, we chasing six-figure features,\nGrinding on the beats, codes in the creases,\nDigital hustler, midnight in sneakers.\n\n[chorus]\nElectro vibes, hearts beat with the hum,\nUrban legends ride, we ain't ever numb,\nCircuits sparking live, tapping on the drum,\nLiving on the edge, never succumb.\n\n[verse]\nSynthesizers blaze, city lights a glow,\nRhythm in the haze, moving with the flow,\nSwagger on stage, energy to blow,\nFrom the blocks to the booth, you already know.\n\n[bridge]\nNight's electric, streets full of dreams,\nBass hits collective, bursting at seams,\nHustle perspective, all in the schemes,\nRise and reflective, ain't no in-betweens.\n\n[verse]\nVibin' with the crew, sync in the wire,\nGot the dance moves, fire in the attire,\nRhythm and blues, soul's our supplier,\nRun the digital zoo, higher and higher.\n\n[chorus]\nElectro vibes, hearts beat with the hum,\nUrban legends ride, we ain't ever numb,\nCircuits sparking live, tapping on the drum,\nLiving on the edge, never succumb.",
-                audio_duration=180,
+                audio_duration=120,
                 infer_step=60,
                 guidance_scale=15,
                 save_path=output_path,
@@ -108,8 +108,17 @@ class MusicGenServer:
 
 @app.local_entrypoint()
 def main():
-    function_test.remote()
+    server = MusicGenServer()
+    endpoint_url = server.generate.get_web_url() # get the url from @modal.fastapi_endpoint(method="POST")
+    
+    response = requests.post(endpoint_url)
+    response.raise_for_status()
+    result = GenerateMusicResponse(**response.json()) # validate response with pydantic model
 
-
+    audio_bytes = base64.b64decode(result.audio_data) # decode base64 string back to bytes
+    with open("generated_music.wav", "wb") as f:
+        f.write(audio_bytes)  # write bytes to a file
+    print("Music generated and saved to generated_music.wav")
+    
 if __name__ == "__main__":
     main()
