@@ -49,35 +49,37 @@ class GenerateMusicResponse(BaseModel):
 class MusicGenServer:
     @modal.enter()
     def load_model(self):
-        from acestep.pipline_ace_step import ACEStepPipline
+        from acestep.pipeline_ace_step import ACEStepPipeline
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        import torch
         from diffusers import AutoPipelineForText2Image
+        import torch
+
         
         #Music Gen Model
-        self.music_model = ACEStepPipline(
+        self.music_model = ACEStepPipeline(
             checkpoint_dir="/models",
             dtype="bfloat16",
             torch_compile=False,
             cpu_offload=False,
             overlapped_decode=False
         )
-        #LLM Model
+        
+        # Large Language Model
         model_id = "Qwen/Qwen2-7B-Instruct"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         self.llm_model = AutoModelForCausalLM.from_pretrained(
             model_id,
             torch_dtype="auto",
             device_map="auto",
             cache_dir="/.cache/huggingface"
-            )
+        )
 
         # Stable Diffusion Model (thumbnails)
         self.image_pipe = AutoPipelineForText2Image.from_pretrained(
             "stabilityai/sdxl-turbo", torch_dtype=torch.float16, variant="fp16", cache_dir="/.cache/huggingface")
         self.image_pipe.to("cuda")
-    
+
     @modal.fastapi_endpoint(method="POST")
     def generate(self) -> GenerateMusicResponse:
         output_dir = "/tmp/outputs"
@@ -120,5 +122,4 @@ def main():
         f.write(audio_bytes)  # write bytes to a file
     print("Music generated and saved to generated_music.wav")
     
-if __name__ == "__main__":
-    main()
+
