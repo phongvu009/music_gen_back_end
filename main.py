@@ -11,11 +11,15 @@ app = modal.App("music-generator")
 image = (
     modal.Image.debian_slim()
     .apt_install("git")
-    .uv_sync()
+    # Ensure FFmpeg is available for torchcodec/libtorchcodec
+    .apt_install("ffmpeg")
+    .pip_install_from_requirements("requirements.txt")
     .run_commands(
         [
             "git clone https://github.com/ace-step/ACE-Step.git /tmp/ACE-Step",
-            "cd /tmp/ACE-Step && pip install .",
+            "cd /tmp/ACE-Step && pip install -e .",
+            # Print ffmpeg version during image build to aid diagnostics
+            "ffmpeg -version || true",
         ]
     )
     .env({"HF_HOME": "/.cache/huggingface"})
@@ -40,7 +44,7 @@ class GenerateMusicResponse(BaseModel):
 
 @app.cls(
     image=image,
-    gpu="L4",
+    gpu="L40S",
     volumes={"/models": model_volume, "/.cache/huggingface": hf_volume},
     secrets=[music_gen_secrets],
     scaledown_window=10
@@ -49,6 +53,34 @@ class GenerateMusicResponse(BaseModel):
 class MusicGenServer:
     @modal.enter()
     def load_model(self):
+        # Debugging: show path info and attempt to ensure /tmp/ACE-Step is importable
+        import sys
+        import os
+        print("--- import diagnostics: start ---")
+        print("CWD:", os.getcwd())
+        print("sys.executable:", sys.executable)
+        print("sys.path:")
+        for p in sys.path:
+            print("  ", p)
+        ace_tmp = "/tmp/ACE-Step"
+        print(f"{ace_tmp} exists?", os.path.exists(ace_tmp))
+        if os.path.exists(ace_tmp):
+            try:
+                print("/tmp/ACE-Step top-level:", os.listdir(ace_tmp))
+            except Exception as e:
+                print("unable to list /tmp/ACE-Step:", e)
+        # If package wasn't installed, add the directory to sys.path as a fallback
+        if ace_tmp not in sys.path:
+            sys.path.insert(0, ace_tmp)
+            print(f"Inserted {ace_tmp} into sys.path")
+        print("--- import diagnostics: end ---")
+        import importlib, subprocess, sys
+
+        if importlib.util.find_spec("torchcodec") is None:
+            print("torchcodec missing; installing...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "torchcodec"])
+            print("torchcodec installed")
+
         from acestep.pipeline_ace_step import ACEStepPipeline
         from transformers import AutoModelForCausalLM, AutoTokenizer
         from diffusers import AutoPipelineForText2Image
