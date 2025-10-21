@@ -7,6 +7,8 @@ import uuid
 from pydantic import BaseModel
 import requests
 
+from prompts import PROMPT_GENERATOR_TEMPLATE, LYRICS_GENERATOR_TEMPLATE
+
 app = modal.App("music-generator")
 
 image = (
@@ -135,6 +137,42 @@ class MusicGenServer:
             "stabilityai/sdxl-turbo", torch_dtype=torch.float16, variant="fp16", cache_dir="/.cache/huggingface")
         self.image_pipe.to("cuda")
 
+    def prompt_qwen(self, question: str):
+        messages=[
+            {"role": "user", "content": question}
+        ]
+
+        text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+
+        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.llm_model.device)
+
+        generate_ids = self.llm.model.generate(
+            model_inputs.input_ids,
+            max_new_tokens=512
+        )
+
+        generate_ids = [
+            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generate_ids)
+        ]
+
+        response = self.tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
+
+        return response
+
+    #use LLM to generate prompt
+    def generate_prompt(self, description: str) :
+        full_prompt = PROMPT_GENERATOR_TEMPLATE.format(user_prompt=description)
+        #send prompt to LLM
+        return self.prompt_qwen(full_prompt)
+
+    def generate_lyrics(self, description:str):
+        full_prompt = LYRICS_GENERATOR_TEMPLATE.format(description=description)
+        return self.prompt_qwen(full_prompt)
+
     @modal.fastapi_endpoint(method="POST")
     def generate(self) -> GenerateMusicResponse:
         output_dir = "/tmp/outputs"
@@ -173,9 +211,6 @@ class MusicGenServer:
     @modal.fastapi_endpoint(method="POST")
     def generate_with_described_lyrics(self, request: GenerateWithDescribedLyricsRequest) -> GenerateMusicResponse3:
         pass
-
-    
-    
 
 
 @app.local_entrypoint()
