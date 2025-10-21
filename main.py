@@ -1,4 +1,5 @@
 import modal
+from typing import List
 import os
 import base64
 import uuid
@@ -35,6 +36,28 @@ hf_volume = modal.Volume.from_name("qwen-hf-cache", create_if_missing=True)
 music_gen_secrets = modal.Secret.from_name("music-gen-secret")
 
 #Create types - chema validation
+class AudioGenerationBase(BaseModel):
+    audio_duration: float = 60.0
+    seed : int = -1
+    guidance_scale: float = 15.0
+    infer_step: int = 60
+
+class GenerateFromDescriptionRequest(AudioGenerationBase):
+    full_described_song: str
+
+class GenerateWithCustomLyricsRequest(AudioGenerationBase):
+    prompt: str
+    lyrics: str
+
+class GenerateWithDescribedLyricsRequest(AudioGenerationBase):
+    prompt: str
+    described_lyrics: str
+
+class GenerateMusicResponseS3(BaseModel):
+    s3_key: str
+    cover_image_s3_key: str
+    categories: List[str]
+
 class GenerateMusicResponse(BaseModel):
     audio_data: str
     
@@ -138,6 +161,21 @@ class MusicGenServer:
         finally:
             if os.path.exists(output_path):
                 os.remove(output_path)  # clean up temp file
+
+    @modal.fastapi_endpoint(method="POST")
+    def generate_from_description(self, request: GenerateFromDescriptionRequest) -> GenerateMusicResponse3:
+        pass
+
+    @modal.fastapi_endpoint(method="POST")
+    def generate_with_lyrics(self, request: GenerateWithCustomLyricsRequest) -> GenerateMusicResponse3:
+        pass
+
+    @modal.fastapi_endpoint(method="POST")
+    def generate_with_described_lyrics(self, request: GenerateWithDescribedLyricsRequest) -> GenerateMusicResponse3:
+        pass
+
+    
+    
 
 
 @app.local_entrypoint()
