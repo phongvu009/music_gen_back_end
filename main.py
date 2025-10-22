@@ -277,7 +277,7 @@ class MusicGenServer:
 
         lyrics = ""
 
-        #if not define as instrumental, create lyrics byt AI
+        #if not define as instrumental, create lyrics by AI based on song description
         if not request.instrumental:
             lyrics = self.generate_lyrics(request.full_described_song)
         #create song with lyrics
@@ -315,15 +315,25 @@ class MusicGenServer:
 @app.local_entrypoint()
 def main():
     server = MusicGenServer()
-    endpoint_url = server.generate.get_web_url() # get the url from @modal.fastapi_endpoint(method="POST")
+    endpoint_url = server.generate_from_description.get_web_url() # get the url from @modal.fastapi_endpoint(method="POST")
+
+    request_data = GenerateFromDescriptionRequest(
+        full_described_song="Acoustic Ballad",
+        guidance_scale=7.5
+    )
     
-    response = requests.post(endpoint_url)
+    payload = request_data.model_dump()
+    
+    response = requests.post(endpoint_url, json=payload)
     response.raise_for_status()
     result = GenerateMusicResponse(**response.json()) # validate response with pydantic model
 
-    audio_bytes = base64.b64decode(result.audio_data) # decode base64 string back to bytes
-    with open("generated_music.wav", "wb") as f:
-        f.write(audio_bytes)  # write bytes to a file
-    print("Music generated and saved to generated_music.wav")
+    if result:
+        print(f"Success: {result.s3_key} - {result.cover_image_s3_key} - {result.categories}")
+
+    # audio_bytes = base64.b64decode(result.audio_data) # decode base64 string back to bytes
+    # with open("generated_music.wav", "wb") as f:
+    #     f.write(audio_bytes)  # write bytes to a file
+    # print("Music generated and saved to generated_music.wav")
     
 
