@@ -44,6 +44,7 @@ class AudioGenerationBase(BaseModel):
     seed : int = -1
     guidance_scale: float = 15.0
     infer_step: int = 60
+    instrumental: bool = False
 
 class GenerateFromDescriptionRequest(AudioGenerationBase):
     full_described_song: str
@@ -151,7 +152,7 @@ class MusicGenServer:
 
         model_inputs = self.tokenizer([text], return_tensors="pt").to(self.llm_model.device)
 
-        generate_ids = self.llm.model.generate(
+        generate_ids = self.llm_model.generate(
             model_inputs.input_ids,
             max_new_tokens=512
         )
@@ -200,7 +201,7 @@ class MusicGenServer:
         # S3 bucket: thumbnails , song
         # env setup in neon server
         s3_client = boto3.client("s3")
-        bucket_name = os.environ("S3_BUCKET_NAME")
+        bucket_name = os.environ["S3_BUCKET_NAME"]
 
         output_dir = "/tmp/outputs"
         os.makedirs(output_dir, exist_ok=True)
@@ -214,7 +215,7 @@ class MusicGenServer:
             infer_step=infer_step,
             guidance_scale=guidance_scale,
             save_path=output_path,
-            manual_seed=str(seed) 
+            manual_seeds=str(seed) 
         )
 
         audio_s3_key = f"{uuid.uuid4()}.wav"
@@ -271,7 +272,7 @@ class MusicGenServer:
                 os.remove(output_path)  # clean up temp file
 
     @modal.fastapi_endpoint(method="POST")
-    def generate_from_description(self, request: GenerateFromDescriptionRequest) -> GenerateMusicResponse3:
+    def generate_from_description(self, request: GenerateFromDescriptionRequest) -> GenerateMusicResponseS3:
         #
         prompt = self.generate_prompt(request.full_described_song)
 
@@ -290,7 +291,7 @@ class MusicGenServer:
 
 
     @modal.fastapi_endpoint(method="POST")
-    def generate_with_lyrics(self, request: GenerateWithCustomLyricsRequest) -> GenerateMusicResponse3:
+    def generate_with_lyrics(self, request: GenerateWithCustomLyricsRequest) -> GenerateMusicResponseS3:
         return self.generate_and_upload_to_s3(
             prompt=request.prompt,
             lyrics=request.lyrics,
@@ -299,7 +300,7 @@ class MusicGenServer:
         )
 
     @modal.fastapi_endpoint(method="POST")
-    def generate_with_described_lyrics(self, request: GenerateWithDescribedLyricsRequest) -> GenerateMusicResponse3:
+    def generate_with_described_lyrics(self, request: GenerateWithDescribedLyricsRequest) -> GenerateMusicResponseS3:
         #Generate lyrics
         lyrics = ""
         if not request.instrumental:
