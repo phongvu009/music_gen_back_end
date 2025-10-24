@@ -327,7 +327,7 @@ def main():
     
     response = requests.post(endpoint_url, json=payload)
     response.raise_for_status()
-    result = GenerateMusicResponse(**response.json()) # validate response with pydantic model
+    result = GenerateMusicResponseS3(**response.json()) # validate response with pydantic model
 
     if result:
         print(f"Success: {result.s3_key} - {result.cover_image_s3_key} - {result.categories}")
